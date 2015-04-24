@@ -1,0 +1,70 @@
+---
+"Practical Machine Learning: Project Write-up"
+---
+
+#Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement ??? a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, the goal was to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+
+#Loading and exploring the data
+I loaded the two datasets into R and at first applied the head() and summary() functions to get a basic idea of what the data looked like. I noticed that there were many variables that had a lot of missing values.  Specifically, there seemed to be a number of summary statistics (e.g. skewness, average...) that were only calculated at certain times (these measurements corresponded to entries in raw_timestamp_part_1), but had missing values for most of the time. 
+
+```{r, eval=FALSE}
+library(caret)
+testing = read.csv(file = "pml-testing.csv", header = TRUE, sep = ",")
+training = read.csv(file = "pml-training.csv",header = TRUE, sep = ",")
+head(training)
+summary(training)
+```
+
+
+I next checked the testing dataset to see whether these summary variables were even present in this dataset. I noticed that in the testing data with the 20 test cases, these variables only showed missing values and were therefore certainly irrelevant for predicting the classe variable on those test cases. After splitting the data provided in pml-training.csv into a training  and testing set (I chose 75% of the data for training). I removed all variables from the training data that only showed missing values in the 20 test cases. I also removed ID and time-stamp variables. In this version I also removed the username, even though I thought it could have predictive value if users show systematic differences in their movements.
+
+```{r, eval=FALSE}
+train <- createDataPartition(y = training$classe, p = 0.75, list = FALSE)
+trainset <- training[train,]
+testset <- training[-train,]
+
+allmisscols <- apply(testing,2, function(x)!all(is.na(x)));  
+colswithoutallmiss <-names(allmisscols[allmisscols>0]);    
+  
+colswithoutallmiss <- colswithoutallmiss[-60]
+colswithoutallmiss <- colswithoutallmiss[7:length(colswithoutallmiss)]
+
+trainset2 <- cbind(trainset[160], trainset[,c(colswithoutallmiss)])
+```
+
+#Random forest analysis
+I decided to use random forest to calculate my predcitions. I first used a smaller subset of the training data to play with some of tuning parameters. Since computing time on my computer was overall quite high, I did not explore to many options and chose single 5-fold cross-validation, so that I did not have to wait too long for results. Apart from the variables mentioned above, all variables were included in the model.
+
+
+```{r, eval=FALSE}
+rf_model2<-train(classe~.,data=trainset2,method="rf",
+                trControl=trainControl(method="cv",number=5),
+                prox=TRUE,allowParallel=TRUE)
+print(rf_model2)
+```
+The expected out-of-sample error based on cross-validation is 0.22%
+
+
+
+```{r, eval=FALSE}
+print(rf_model2$finalModel)
+```
+
+The model performed well on the 20 test cases provided in pml-testing.csv - all predictions were correct.
+
+```{r, eval=FALSE}
+predictcases <- predict(rf_model2,newdata = testing)
+
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(predictcases)
+```
+
